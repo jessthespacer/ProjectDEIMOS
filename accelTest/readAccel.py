@@ -1,45 +1,76 @@
-from matplotlib import pyplot as plt
-import matplotlib.animation as animation
-import datetime as dt
-from itertools import count
-from time import time
+# Conversions found here: https://www.electronicwings.com/sensors-modules/mpu6050-gyroscope-accelerometer-temperature-sensor-module
+
+import numpy as np
+import time
 import serial
+from pprint import pprint
+from matplotlib import pyplot as plt
+from sys import exit
 
-''' Set up serial input '''
-arduino = serial.Serial('COM4', 9600, timeout=.1)
+def getAccel(serIn):
+	b = ser.readline()
+	data = b.decode().rstrip()
+	accel = np.array([int(x) for x in data.split(',')])
+	return accel
 
-''' Set up live plot '''
-fig = plt.figure()
-ax = fig.add_subplot(1, 1, 1)
-xs = []
-ys = []
+# Set up serial input
+try:
+	ser = serial.Serial('COM4', 38400, timeout=.1)
+except serial.SerialException as e:
+	print('ERROR: Serial port could not be opened:')
+	print(e)
+	exit()
 
-def animate(i, xs, ys):
-	accel = [0, 0, 0]
-	# Read data from serial
-	data = arduino.readline()[:-2]
-	if data:
-		data = data.split(b',')
-		accel = [int(x) for x in data]
+print('Serial connection open.')
+time.sleep(2)
 
-	xddot = accel[0]
-	yddot = accel[1]
-	zddot = accel[2]
+data = np.zeros(7)
+read = np.zeros(7)
 
-	xs.append(dt.datetime.now().strftime('%H:%M:%S.%f'))
-	ys.append(xddot)
+period = 5
 
-	xs = xs[-20:]
-	ys = ys[-20:]
+try:
+	tic = time.time()
+	print('Recording...')
+	while time.time() < tic + period:
+		read[0] = time.time() - tic
+		try:
+			read[1:] = getAccel(ser)
+		except UnicodeDecodeError:
+			continue
+		except ValueError:
+			continue
+		except KeyboardInterrupt:
+			break
+		data = np.vstack([data, read])
+finally:
+	ser.close()
+	print('Done. Closing serial connection.')
 
-	ax.clear()
-	ax.plot(xs, ys)
+# Get rid of zero row
+data = data[1:, :].astype(float)
 
-	plt.xticks(rotation=45, ha='right')
-	plt.ylim([-4000, 4000])
-	plt.subplots_adjust(bottom=0.30)
-	plt.title('Acceleration')
-	plt.ylabel('xddot')
+# Convert readings to g and deg/s
+data[:, 1:4] = data[:, 1:4] * 1/16384
+data[:, 4:] = data[:, 4:] * 1/131
 
-ani = animation.FuncAnimation(fig, animate, fargs=(xs, ys), interval=100)
-plt.show()
+print('Collected', np.shape(data)[0], 'datapoints in', period, 'seconds.')
+
+# Plot data
+facc = plt.figure(1)
+plt.plot(data[:, 0], data[:, 1:4])
+plt.xlabel('Time [s]')
+plt.ylabel('Acceleration [g]')
+plt.legend(['xddot', 'yddot', 'zddot'])
+plt.grid(True)
+facc.show()
+
+fgyr = plt.figure(2)
+plt.plot(data[:, 0], data[:, 4:])
+plt.xlabel('Time [s]')
+plt.ylabel('Angular velocity [deg/s]')
+plt.legend(['omega_x', 'omega_y', 'omega_z'])
+plt.grid(True)
+fgyr.show()
+
+input()
