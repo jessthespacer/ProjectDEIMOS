@@ -7,6 +7,12 @@ from pprint import pprint
 from matplotlib import pyplot as plt
 from sys import exit
 
+g = 9.81
+# Gravitational accel in Waterloo, ON
+gLocal = 9.8224
+# 95% CI
+z = 1.96
+
 def getAccel(serIn):
 	b = ser.readline()
 	data = b.decode().rstrip()
@@ -50,8 +56,8 @@ finally:
 # Get rid of zero row
 data = data[1:, :].astype(float)
 
-# Convert readings to g and deg/s
-data[:, 1:4] = data[:, 1:4] * 1/16384
+# Convert readings to m/s and deg/s
+data[:, 1:4] = data[:, 1:4] * 1/16384 * g
 data[:, 4:] = data[:, 4:] * 1/131
 
 print('Collected', np.shape(data)[0], 'datapoints in', period, 'seconds.')
@@ -60,7 +66,7 @@ print('Collected', np.shape(data)[0], 'datapoints in', period, 'seconds.')
 facc = plt.figure(1)
 plt.plot(data[:, 0], data[:, 1:4])
 plt.xlabel('Time [s]')
-plt.ylabel('Acceleration [g]')
+plt.ylabel('Acceleration [m/s^2]')
 plt.legend(['xddot', 'yddot', 'zddot'])
 plt.grid(True)
 facc.show()
@@ -72,5 +78,16 @@ plt.ylabel('Angular velocity [deg/s]')
 plt.legend(['omega_x', 'omega_y', 'omega_z'])
 plt.grid(True)
 fgyr.show()
+
+# Process data
+Npoints = np.shape(data[:, 1:4])[0]
+accelVecs = data[:, 1:4]
+accelRMS = np.sqrt(np.sum(accelVecs**2, 0)/Npoints)
+accelMean = np.mean(accelVecs, 0)
+accelStd = np.linalg.norm(np.std(accelVecs, 0))
+# print('RMS acceleration vector:', accelRMS, '[m/s^2]')
+# print('Magnitude:', np.linalg.norm(accelRMS), '[m/s^2]')
+print('Mean acceleration vector:', accelMean, '[m/s^2]')
+print('Magnitude:', np.linalg.norm(accelMean), '+-', accelStd*z/np.sqrt(Npoints), '[m/s^2]')
 
 input()
